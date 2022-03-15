@@ -6,7 +6,7 @@ import random
 import cv2
 import numpy as np
 
-class RLBot(BotAI): # inhereits from BotAI (part of BurnySC2)
+class RLbot(BotAI): # inhereits from BotAI (part of BurnySC2)
     def __init__(self):
         self.ITERATIONS_PER_MINUTE = 165
         self.MAX_WORKERS = 50

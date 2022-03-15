@@ -4,7 +4,7 @@ from sc2.player import Bot, Computer  #wrapper for whether or not the agent is o
 from sc2 import maps  # maps method for loading maps to play in.
 
 from Agents.dummyAgent import DummyAgent
-from Agents.SentBot import RLBot
+from Agents.RLBot import RLBot
 from Agents.CannonRush import CannonRushBot
 
 

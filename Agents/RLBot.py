@@ -80,9 +80,10 @@ class RLbot(BotAI): # inhereits from BotAI (part of BurnySC2)
 
     async def intel(self,nexus_list):
         game_data = np.zeros((self.game_info.map_size[1], self.game_info.map_size[0], 3), np.uint8)
+        
         for nexus in nexus_list:
             nex_pos = nexus.position
-            print(nex_pos)
+            #print(nex_pos)
             cv2.circle(game_data, (int(nex_pos[0]), int(nex_pos[1])), 10, (0, 255, 0), -1)  # BGR
 
         # flip horizontally to make our final fix in visual representation:
@@ -93,11 +94,13 @@ class RLbot(BotAI): # inhereits from BotAI (part of BurnySC2)
         cv2.waitKey(1)
 
     async def on_step(self, iteration: int): # on_step is a method that is called every step of the game.
+        """
         print(f"{iteration}, n_workers: {self.workers.amount}, n_idle_workers: {self.workers.idle.amount},", \
             f"minerals: {self.minerals}, gas: {self.vespene}, cannons: {self.structures(UnitTypeId.PHOTONCANNON).amount},", \
             f"pylons: {self.structures(UnitTypeId.PYLON).amount}, nexus: {self.structures(UnitTypeId.NEXUS).amount}", \
             f"gateways: {self.structures(UnitTypeId.GATEWAY).amount}, cybernetics cores: {self.structures(UnitTypeId.CYBERNETICSCORE).amount}", \
             f"stargates: {self.structures(UnitTypeId.STARGATE).amount}, voidrays: {self.units(UnitTypeId.VOIDRAY).amount}, supply: {self.supply_used}/{self.supply_cap}")
+            """
         
         self.iteration = iteration
         

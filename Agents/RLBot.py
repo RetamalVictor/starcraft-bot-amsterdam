@@ -1,15 +1,20 @@
 #Heavily inspired from https://pythonprogramming.net/scouting-visual-input-starcraft-ii-ai-python-sc2-tutorial/?completed=/deep-learning-starcraft-ii-ai-python-sc2-tutorial/
+import cv2
+import random
+import numpy as np
+
+from sc2 import position 
+from sc2.units import Unit
 from sc2.bot_ai import BotAI  # parent class we inherit from
 from sc2.ids.unit_typeid import UnitTypeId
-import random
-
-import cv2
-import numpy as np
 
 class RLbot(BotAI): # inhereits from BotAI (part of BurnySC2)
     def __init__(self):
         self.ITERATIONS_PER_MINUTE = 165
         self.MAX_WORKERS = 50
+
+    async def on_enemy_unit_entered_vision(self, unit: Unit):
+        return await super().on_enemy_unit_entered_vision(unit)
 
     async def train_probe(self, nexus, supply_remaining):
           if nexus.is_idle and self.can_afford(UnitTypeId.PROBE) and\
@@ -78,13 +83,45 @@ class RLbot(BotAI): # inhereits from BotAI (part of BurnySC2)
             self.can_afford(UnitTypeId.NEXUS):
             await self.expand_now()
 
-    async def intel(self,nexus_list):
+    async def intel(self):
         game_data = np.zeros((self.game_info.map_size[1], self.game_info.map_size[0], 3), np.uint8)
-        
-        for nexus in nexus_list:
+        draw_dict = {
+                     UnitTypeId.PYLON: [3, (20, 235, 0)],
+                     UnitTypeId.PROBE: [1, (55, 200, 0)],
+                     UnitTypeId.ASSIMILATOR: [2, (55, 200, 0)],
+                     UnitTypeId.GATEWAY: [3, (200, 100, 0)],
+                     UnitTypeId.CYBERNETICSCORE: [3, (150, 150, 0)],
+                     UnitTypeId.STARGATE: [5, (255, 0, 0)],
+                     UnitTypeId.ROBOTICSFACILITY: [5, (215, 155, 0)],
+
+                     UnitTypeId.VOIDRAY: [3, (255, 100, 0)],
+                     #OBSERVER: [3, (255, 255, 255)],
+                    }
+        for nexus in self.townhalls:
             nex_pos = nexus.position
             #print(nex_pos)
             cv2.circle(game_data, (int(nex_pos[0]), int(nex_pos[1])), 10, (0, 255, 0), -1)  # BGR
+
+        for unit_type in draw_dict:
+            for unit in self.units(unit_type).ready:
+                pos = unit.position
+                cv2.circle(game_data,(int(pos[0]),int(pos[1])),draw_dict[unit_type][0], draw_dict[unit_type][1], -1)
+
+        for enemy_building in self.enemy_structures:
+            pos = enemy_building.position
+            cv2.circle(game_data, (int(pos[0]), int(pos[1])), 5, (200, 50, 212), -1)
+
+        for enemy_unit in self.enemy_units:
+            if not enemy_unit.is_structure:
+                worker_names = ["probe",
+                                "scv",
+                                "drone"]
+                # if that unit is a PROBE, SCV, or DRONE... it's a worker
+                pos = enemy_unit.position
+                if enemy_unit.name.lower() in worker_names:
+                    cv2.circle(game_data, (int(pos[0]), int(pos[1])), 1, (55, 0, 155), -1)
+                else:
+                    cv2.circle(game_data, (int(pos[0]), int(pos[1])), 3, (50, 0, 215), -1)
 
         # flip horizontally to make our final fix in visual representation:
         flipped = cv2.flip(game_data, 0)
@@ -92,6 +129,48 @@ class RLbot(BotAI): # inhereits from BotAI (part of BurnySC2)
 
         cv2.imshow('Intel', resized)
         cv2.waitKey(1)
+
+    async def build_robotic(self):
+
+        if self.structures(UnitTypeId.CYBERNETICSCORE).ready:
+            if len(self.units(UnitTypeId.ROBOTICSFACILITY)) < 1:
+                    if self.can_afford(UnitTypeId.ROBOTICSFACILITY) and not self.already_pending(UnitTypeId.ROBOTICSFACILITY):
+                        pylon = self.structures(UnitTypeId.PYLON).ready.random
+                        await self.build(UnitTypeId.ROBOTICSFACILITY, near=pylon)
+
+    def random_location_variance(self, enemy_start_location):
+        x = enemy_start_location[0]
+        y = enemy_start_location[1]
+
+        x += ((random.randrange(-20, 20))/100) * enemy_start_location[0]
+        y += ((random.randrange(-20, 20))/100) * enemy_start_location[1]
+
+        if x < 0:
+            x = 0
+        if y < 0:
+            y = 0
+        if x > self.game_info.map_size[0]:
+            x = self.game_info.map_size[0]
+        if y > self.game_info.map_size[1]:
+            y = self.game_info.map_size[1]
+
+        go_to = position.Point2(position.Pointlike((x,y)))
+        return go_to
+
+    async def scout(self):
+
+        if len(self.units(UnitTypeId.OBSERVER)) > 0:
+            scout = self.units(UnitTypeId.OBSERVER)[0]
+            if scout.is_idle:
+                enemy_location = self.enemy_start_locations[0]
+                move_to = self.random_location_variance(enemy_location)
+                print(move_to)
+                await self.do(scout.move(move_to))
+
+        else:
+            for rf in self.units(UnitTypeId.ROBOTICSFACILITY).ready.idle:
+                if self.can_afford(UnitTypeId.OBSERVER) and self.supply_left > 0:
+                    await self.do(rf.train(UnitTypeId.OBSERVER))
 
     async def on_step(self, iteration: int): # on_step is a method that is called every step of the game.
         """
@@ -117,15 +196,17 @@ class RLbot(BotAI): # inhereits from BotAI (part of BurnySC2)
             else:
                 # if we dont have *any* pylons, we'll build one close to the nexus.
                 await self.build_pylon(nexus)
-    
+
+            await self.scout()
             await self.build_assimilator(nexus)
             await self.build_forge(nexus)
             await self.build_cannon(nexus)
             await self.build_gateway(nexus)
             await self.build_cybernetic(nexus)
             await self.build_stargate(nexus)
-            await self.expand()
-            await self.intel(self.townhalls)
+            await self.build_robotic()
+            #await self.expand()
+            await self.intel()
 
         else:
             if self.can_afford(UnitTypeId.NEXUS):  # can we afford one?
